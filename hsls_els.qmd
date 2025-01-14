@@ -1,0 +1,894 @@
+---
+title: "hsls_els"
+format: pdf
+editor: visual
+---
+
+1 = strongly disagree 2 = disagree 3 = agree 4 = strongly agree
+
+i1 = Teen (9th / 11th grader) confident can do excellent job on (fall 2009 / spring 2012) math tests
+
+i2 = Teen (9th / 11th grader) certain can understand (fall 2009 / spring 2012) math textbook
+
+i3 = Can understand difficult math class (ELS ONLY!)
+
+i4 = Teen confident can do an excellent job on math assignments
+
+i5 = Teen certain can master skills in math course
+
+Can understand difficult math class
+
+```{r}
+library(dplyr)
+library(lavaan)
+library(ltm)
+library(sjlabelled)
+library(kableExtra)
+library(sirt)
+library(mirt)  
+
+#source("code/download_data.R")
+source("F:/Users/alex/OneDrive/Documents/data/prepare_data.R")
+
+m_items <- paste0("i", 1:5)
+m_items_2 <- paste0(m_items, "_2")
+# get subset of relevant variables
+dat <- dat[, c("stu_id", "sample", "sex", "dropout", m_items, m_items_2)]
+
+dat$mean_score <- c(rowMeans(dat[dat$sample == "ELS", m_items], na.rm = TRUE),
+                    rowMeans(dat[dat$sample == "HSLS", m_items[-3]], na.rm = TRUE))
+dat$mean_score_2 <- c(rowMeans(dat[dat$sample == "ELS", m_items_2], na.rm = TRUE),
+                    rowMeans(dat[dat$sample == "HSLS", m_items_2[-3]], na.rm = TRUE))
+
+```
+
+```{r}
+
+# Creating only HSLS
+hsls <- subset(dat, sample == "HSLS")
+
+hsls_1 <- hsls[, c("i1", "i2", "i4", "i5")]
+head(hsls_1)
+
+hsls_2 <- hsls[, c("i1_2", "i2_2", "i4_2", "i5_2")]
+head(hsls_2)
+
+hsls_1_noNA <- na.omit(hsls_1)
+hsls_2_noNA <- na.omit(hsls_2)
+
+
+# Creating only ELS
+els <- subset(dat, sample == "ELS")
+
+els_1 <- els[, c("i1", "i2", "i3", "i4", "i5")]
+head(els_1)
+
+els_2 <- els[, c("i1_2", "i2_2", "i3_2", "i4_2", "i5_2")]
+head(els_2)
+
+els_1_noNA <- na.omit(els_1)
+els_2_noNA <- na.omit(els_2)
+```
+
+```{r}
+
+cfa_config <-  '
+  group: ELS
+  math =~ NA   * i1 + 
+          el2_1 * i2 + 
+          el3_1 * i3 + 
+          el4_1 * i4 + 
+          el5_1 * i5
+          
+  # Naming the intercepts!       
+  i1 ~ nu1_1 * 1
+  i2 ~ nu2_1 * 1
+  i3 ~ nu3_1 * 1
+  i4 ~ nu4_1 * 1
+  i5 ~ nu5_1 * 1
+  
+  # Naming the residual variances!
+  i1 ~~ theta1_1 * i1
+  i2 ~~ theta2_1 * i2
+  i3 ~~ theta3_1 * i3
+  i4 ~~ theta4_1 * i4
+  i5 ~~ theta5_1 * i5
+  
+  # Adding the covariances
+  i1 ~~ i2
+  i2 ~~ i3
+  
+  # Fixing latent variance to 1, as we freed first factor loading
+  math ~~ 1 * math
+  
+  # Fixing latent mean to 0 for identification?
+  math ~ 0 * 1      
+     
+     
+  group: HSLS
+  math =~ NA   * i1 + 
+          hl2_2 * i2 + 
+          hl4_2 * i4 + 
+          hl5_2 * i5
+          
+  # Naming the intercepts! 
+  i1 ~ nu1_2 * 1
+  i2 ~ nu2_2 * 1
+  i4 ~ nu4_2 * 1
+  i5 ~ nu5_2 * 1
+  
+  # Naming the residual variances!
+  i1 ~~ theta1_2 * i1
+  i2 ~~ theta2_2 * i2
+  i4 ~~ theta4_2 * i4
+  i5 ~~ theta5_2 * i5
+  
+  # Adding the covariances
+    #i1 ~~ i2
+    i2 ~~ i4
+  
+  # Fixing latent variance to 1, as we freed first factor loading
+  math ~~ 1 * math
+  
+  # Fixing latent mean to 0 for identification?
+  math ~ 0 * 1  
+'
+
+fit_config  <- cfa(cfa_config, data = dat, group = "sample", 
+                   estimator = "MLR", missing = "FIML", se = "robust.mlr")
+
+
+s_config <- summary(fit_config, fit.measures = TRUE, standardized = TRUE)
+
+
+mod_indices <- modindices(fit_config, sort. = TRUE, free.remove = FALSE)
+head(mod_indices)
+
+# Just for ELS
+mod_indices_els <- mod_indices[mod_indices$group == "ELS", ]
+head(mod_indices_els)
+
+
+# Just for HSLS 
+mod_indices_hsls <- mod_indices[mod_indices$group == "HSLS", ]
+head(mod_indices_hsls)
+
+```
+
+#CONFIG ELS + HSLS 
+
+```{r}
+config_comb <-  '
+  # ELS
+  group: 1
+  
+  # Time point 1
+  math_t1 =~ NA   * i1 + 
+          el2_1 * i2 + 
+          el3_1 * i3 + 
+          el4_1 * i4 + 
+          el5_1 * i5
+          
+  # Naming the intercepts!       
+  i1 ~ enu1_1 * 1
+  i2 ~ enu2_1 * 1
+  i3 ~ enu3_1 * 1
+  i4 ~ enu4_1 * 1
+  i5 ~ enu5_1 * 1
+  
+  # Naming the residual variances!
+  i1 ~~ etheta1_1 * i1
+  i2 ~~ etheta2_1 * i2
+  i3 ~~ etheta3_1 * i3
+  i4 ~~ etheta4_1 * i4
+  i5 ~~ etheta5_1 * i5
+  
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_t1 ~~ 1 * math_t1
+  
+  # Fixing latent mean to 0 for identification?
+  math_t1 ~ 0 * 1      
+     
+  # Time point 2
+   math_t2 =~ NA   * i1_2 + 
+            el2_2 * i2_2 + 
+            el3_2 * i3_2 + 
+            el4_2 * i4_2 + 
+            el5_2 * i5_2
+          
+  # Naming the intercepts!       
+  i1_2 ~ enu1_2 * 1
+  i2_2 ~ enu2_2 * 1
+  i3_2 ~ enu3_2 * 1
+  i4_2 ~ enu4_2 * 1
+  i5_2 ~ enu5_2 * 1
+  
+  # Naming the residual variances!
+  i1_2 ~~ etheta1_2 * i1_2
+  i2_2 ~~ etheta2_2 * i2_2
+  i3_2 ~~ etheta3_2 * i3_2
+  i4_2 ~~ etheta4_2 * i4_2
+  i5_2 ~~ etheta5_2 * i5_2
+  
+  
+  ## Adding the covariances ##
+  i1 ~~ i2
+  i1_2 ~~ i2_2
+  
+  i1 ~~ i3
+  i1_2 ~~ i3_2
+
+  i2 ~~ i3
+  i2_2 ~~ i3_2
+
+  i4 ~~ i5
+  i4_2 ~~ i5_2
+
+  
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_t2 ~~ 1 * math_t2
+  
+  # Fixing latent mean to 0 for identification
+  math_t2 ~ 0 * 1 
+  
+  # Correlations across time
+  math_t1 ~~ math_t2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2     
+     
+ # HSLS
+ group: 2
+  # Time Point 1
+  math_t1 =~ NA   * i1 + 
+            hl2_1 * i2 + 
+            #hl3_1 * i3 +
+            hl4_1 * i4 + 
+            hl5_1 * i5
+          
+  # Naming the intercepts! 
+  i1 ~ hnu1_1 * 1
+  i2 ~ hnu2_1 * 1
+  #i3 ~ hnu3_1 * 1
+  i4 ~ hnu4_1 * 1
+  i5 ~ hnu5_1 * 1
+  
+  # Naming the residual variances!
+  i1 ~~ htheta1_1 * i1
+  i2 ~~ htheta2_1 * i2
+  #i3 ~~ htheta3_1 * i3
+  i4 ~~ htheta4_1 * i4
+  i5 ~~ htheta5_1 * i5
+
+  
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_t1 ~~ 1 * math_t1
+  
+  # Fixing latent mean to 0 for identification
+  math_t1 ~ 0 * 1  
+  
+  # Time Point 2
+  math_t2 =~ NA   * i1_2 + 
+             hl2_2 * i2_2 + 
+             #hl3_2 * i3_2 +
+             hl4_2 * i4_2 + 
+             hl5_2 * i5_2
+          
+  # Naming the intercepts!       
+  i1_2 ~ hnu1_2 * 1
+  i2_2 ~ hnu2_2 * 1
+  #i3_2 ~ hnu3_2 * 1
+  i4_2 ~ hnu4_2 * 1
+  i5_2 ~ hnu5_2 * 1
+  
+  # Naming the residual variances!
+  i1_2 ~~ htheta1_2 * i1_2
+  i2_2 ~~ htheta2_2 * i2_2
+  #i3_2 ~~ htheta3_1 * i3_2
+  i4_2 ~~ htheta4_2 * i4_2
+  i5_2 ~~ htheta5_2 * i5_2
+  
+  ## Adding the covariances ##
+  i1 ~~ i2
+  i1_2 ~~ i2_2
+  
+  i1 ~~ i4
+  i1_2 ~~ i4_2
+  
+  i2 ~~ i4
+  i2_2 ~~ i4_2
+
+  i1 ~~ i5
+  i1_2 ~~ i5_2
+  
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_t2 ~~ 1 * math_t2
+  
+  # Fixing latent mean to 0 for identification
+  math_t2 ~ 0 * 1
+  
+  
+  # Correlations across time
+  math_t1 ~~ math_t2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  #i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2     
+
+'
+
+
+fit_config_comb  <- cfa(config_comb, data = dat, group = "sample", 
+                    estimator = "MLR", missing = "FIML", se = "robust.mlr")
+fit_config_comb
+
+head(modindices(fit_config_comb, sort. = TRUE, free.remove = FALSE))
+
+s_config_comb <- summary(fit_config_comb, fit.measures = TRUE)
+
+```
+
+
+
+# WEAK ELS + HSLS 
+
+```{r}
+# Only the first latent variance is set to 1, the rest are free. 
+# Latent means all 0.
+
+weak_comb <- '
+
+############################################################################
+##                           ELS (Group 1)                                ##
+############################################################################
+group: ELS
+
+  #####################
+  # Time Point 1
+  #####################
+  math_t1 =~ NA   * i1 +
+             l2_1 * i2 +
+             l3_1 * i3 +
+             l4_1 * i4 +
+             l5_1 * i5
+
+  # Intercepts
+  i1 ~ enu1_1 * 1
+  i2 ~ enu2_1 * 1
+  i3 ~ enu3_1 * 1
+  i4 ~ enu4_1 * 1
+  i5 ~ enu5_1 * 1
+
+  # Residual variances
+  i1 ~~ etheta1_1 * i1
+  i2 ~~ etheta2_1 * i2
+  i3 ~~ etheta3_1 * i3
+  i4 ~~ etheta4_1 * i4
+  i5 ~~ etheta5_1 * i5
+
+  # Fix latent variance to 1 for identification, fix mean to 0
+  math_t1 ~~ 1 * math_t1
+  math_t1 ~ 0 * 1
+
+
+  #####################
+  # Time Point 2
+  #####################
+  math_t2 =~ NA   * i1_2 +
+             l2_2 * i2_2 +
+             l3_2 * i3_2 +
+             l4_2 * i4_2 +
+             l5_2 * i5_2
+
+  # Intercepts
+  i1_2 ~ enu1_2 * 1
+  i2_2 ~ enu2_2 * 1
+  i3_2 ~ enu3_2 * 1
+  i4_2 ~ enu4_2 * 1
+  i5_2 ~ enu5_2 * 1
+
+  # Residual variances
+  i1_2 ~~ etheta1_2 * i1_2
+  i2_2 ~~ etheta2_2 * i2_2
+  i3_2 ~~ etheta3_2 * i3_2
+  i4_2 ~~ etheta4_2 * i4_2
+  i5_2 ~~ etheta5_2 * i5_2
+
+  # Covariances among items
+  i1 ~~ i2
+  i1_2 ~~ i2_2
+  
+  i1 ~~ i3
+  i1_2 ~~ i3_2
+
+  i2 ~~ i3
+  i2_2 ~~ i3_2
+
+  i4 ~~ i5
+  i4_2 ~~ i5_2
+
+  # Fix latent variance to 1 for identification, free mean
+  math_t2 ~~ 1 * math_t2
+  math_t2 ~ NA * 1
+  
+  # Correlations across time
+  math_t1 ~~ math_t2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+
+
+############################################################################
+##                          HSLS (Group 2)                                ##
+############################################################################
+group: HSLS
+
+  #####################
+  # Time Point 1
+  #####################
+  math_t1 =~ NA   *i1 +
+             l2_1 * i2 +   # Same label as ELS
+             # no i3 in HSLS
+             l4_1 * i4 +   # Same label as ELS
+             l5_1 * i5     # Same label as ELS
+
+  # Intercepts
+  i1 ~ hnu1_1 * 1
+  i2 ~ hnu2_1 * 1
+  # i3 ~ hnu3_1 * 1 (item not in HSLS)
+  i4 ~ hnu4_1 * 1
+  i5 ~ hnu5_1 * 1
+
+  # Residual variances
+  i1 ~~ htheta1_1 * i1
+  i2 ~~ htheta2_1 * i2
+  # i3 ~~ htheta3_1 * i3 (item not in HSLS)
+  i4 ~~ htheta4_1 * i4
+  i5 ~~ htheta5_1 * i5
+
+  # Free latent variance and free latent mean
+  math_t1 ~~ var_hsls * math_t1
+  math_t1 ~ NA * 1
+
+
+  #####################
+  # Time Point 2
+  #####################
+  math_t2 =~ NA   * i1_2 +
+             l2_2 * i2_2 +   # Same label as ELS
+             # no i3_2 in HSLS at Time 2
+             l4_2 * i4_2 +   # Same label as ELS
+             l5_2 * i5_2     # Same label as ELS
+
+  # Intercepts
+  i1_2 ~ hnu1_2 * 1
+  i2_2 ~ hnu2_2 * 1
+  # i3_2 ~ hnu3_2 * 1 (item not in HSLS)
+  i4_2 ~ hnu4_2 * 1
+  i5_2 ~ hnu5_2 * 1
+
+  # Residual variances
+  i1_2 ~~ htheta1_2 * i1_2
+  i2_2 ~~ htheta2_2 * i2_2
+  # i3_2 ~~ htheta3_2 * i3_2 (item not in HSLS)
+  i4_2 ~~ htheta4_2 * i4_2
+  i5_2 ~~ htheta5_2 * i5_2
+
+  # Covariances among items
+  i1 ~~ i2
+  i1_2 ~~ i2_2
+  
+  i1 ~~ i4
+  i1_2 ~~ i4_2
+  
+  i2 ~~ i4
+  i2_2 ~~ i4_2
+
+  i1 ~~ i5
+  i1_2 ~~ i5_2
+
+  # Free latent variance and free latent mean
+  math_t2 ~~ var_hsls_t2 * math_t2
+  math_t2 ~ NA * 1
+
+  # Correlations across time
+  math_t1 ~~ math_t2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  # i3 ~~ i3_2 (item not in HSLS)
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+
+'
+
+
+fit_weak_comb  <- cfa(weak_comb, data = dat, group = "sample", 
+                    estimator = "MLR", missing = "FIML", se = "robust.mlr")
+fit_weak_comb
+
+head(modindices(fit_weak_comb, sort. = TRUE, free.remove = FALSE))
+
+s_weak_comb <- summary(fit_weak_comb, fit.measures = TRUE, standardized = TRUE)
+
+lavTestLRT(fit_config_comb, fit_weak_comb)
+```
+
+# STRONG ELS + HSLS
+
+```{r}
+strong_comb <- '
+
+############################################################################
+##                           ELS (Group 1)                                ##
+############################################################################
+group: ELS
+
+  #####################
+  # Time Point 1
+  #####################
+  math_t1 =~ NA    * i1 +
+             l2_1 * i2 +
+             l3_1 * i3 +
+             l4_1 * i4 +
+             l5_1 * i5
+
+  # Intercepts
+  # Same labels for both groups!
+  i1 ~ nu1_1 * 1
+  i2 ~ nu2_1 * 1
+  i3 ~ nu3_1 * 1
+  i4 ~ nu4_1 * 1
+  i5 ~ nu5_1 * 1
+
+  # Residual variances
+  i1 ~~ etheta1_1 * i1
+  i2 ~~ etheta2_1 * i2
+  i3 ~~ etheta3_1 * i3
+  i4 ~~ etheta4_1 * i4
+  i5 ~~ etheta5_1 * i5
+
+  # Fix latent variance to 1 for identification, fix mean to 0
+  math_t1 ~~ 1 * math_t1
+  math_t1 ~ 0 * 1
+
+
+  #####################
+  # Time Point 2
+  #####################
+  math_t2 =~ 1*i1_2 +
+             l2_2 * i2_2 +
+             l3_2 * i3_2 +
+             l4_2 * i4_2 +
+             l5_2 * i5_2
+
+  # Intercepts
+  # Same labels for both groups!
+  i1_2 ~ nu1_2 * 1
+  i2_2 ~ nu2_2 * 1
+  i3_2 ~ nu3_2 * 1
+  i4_2 ~ nu4_2 * 1
+  i5_2 ~ nu5_2 * 1
+
+  # Residual variances
+  i1_2 ~~ etheta1_2 * i1_2
+  i2_2 ~~ etheta2_2 * i2_2
+  i3_2 ~~ etheta3_2 * i3_2
+  i4_2 ~~ etheta4_2 * i4_2
+  i5_2 ~~ etheta5_2 * i5_2
+
+  # Covariances among items
+  i1 ~~ i2
+  i1_2 ~~ i2_2
+  
+  i1 ~~ i3
+  i1_2 ~~ i3_2
+
+  i2 ~~ i3
+  i2_2 ~~ i3_2
+
+  i4 ~~ i5
+  i4_2 ~~ i5_2
+
+  # Fix latent variance to 1 for identification, free mean
+  math_t2 ~~ var_els_t2 * math_t2
+  math_t2 ~ NA * 1
+
+  # Correlations across time
+  math_t1 ~~ math_t2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+
+
+############################################################################
+##                          HSLS (Group 2)                                ##
+############################################################################
+group: HSLS
+
+  #####################
+  # Time Point 1
+  #####################
+  math_t1 =~ NA   * i1 +
+             l2_1 * i2 +   # Same label as ELS
+             # no i3 in HSLS
+             l4_1 * i4 +   # Same label as ELS
+             l5_1 * i5     # Same label as ELS
+
+  # Intercepts
+  # Same labels for both groups!
+  i1 ~ nu1_1 * 1
+  i2 ~ nu2_1 * 1
+  # i3 ~ hnu3_1 * 1 (item not in HSLS)
+  i4 ~ nu4_1 * 1
+  i5 ~ nu5_1 * 1
+
+  # Residual variances
+  i1 ~~ htheta1_1 * i1
+  i2 ~~ htheta2_1 * i2
+  # i3 ~~ htheta3_1 * i3 (item not in HSLS)
+  i4 ~~ htheta4_1 * i4
+  i5 ~~ htheta5_1 * i5
+
+ # Free latent variance and free latent mean
+  math_t1 ~~ var_hsls * math_t1
+  math_t1 ~ NA * 1
+
+
+  #####################
+  # Time Point 2
+  #####################
+  math_t2 =~ NA   * i1_2 +
+             l2_2 * i2_2 +   # Same label as ELS
+             # no i3_2 in HSLS at Time 2
+             l4_2 * i4_2 +   # Same label as ELS
+             l5_2 * i5_2     # Same label as ELS
+
+  # Intercepts
+  # Same labels for both groups!
+  
+  i1_2 ~ nu1_2 * 1
+  i2_2 ~ nu2_2 * 1
+  # i3_2 ~ hnu3_2 * 1 (item not in HSLS)
+  i4_2 ~ nu4_2 * 1
+  i5_2 ~ nu5_2 * 1
+
+  # Residual variances
+  i1_2 ~~ htheta1_2 * i1_2
+  i2_2 ~~ htheta2_2 * i2_2
+  # i3_2 ~~ htheta3_2 * i3_2 (item not in HSLS)
+  i4_2 ~~ htheta4_2 * i4_2
+  i5_2 ~~ htheta5_2 * i5_2
+
+  # Covariances among items
+  i1 ~~ i2
+  i1_2 ~~ i2_2
+  
+  i1 ~~ i4
+  i1_2 ~~ i4_2
+  
+  i2 ~~ i4
+  i2_2 ~~ i4_2
+
+  i1 ~~ i5
+  i1_2 ~~ i5_2
+
+  # Free latent variance and free latent mean
+  math_t2 ~~ var_hsls_t2 * math_t2
+  math_t2 ~ NA * 1
+
+  # Correlations across time
+  math_t1 ~~ math_t2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  # i3 ~~ i3_2 (item not in HSLS)
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+
+'
+
+
+fit_strong_comb  <- cfa(strong_comb, data = dat, group = "sample", 
+                    estimator = "MLR", missing = "FIML", se = "robust.mlr")
+fit_strong_comb
+
+head(modindices(fit_strong_comb, sort. = TRUE, free.remove = FALSE))
+
+s_strong_comb <- summary(fit_strong_comb, fit.measures = TRUE, standardized = TRUE)
+
+lavTestLRT(fit_weak_comb, fit_strong_comb)
+```
+
+# Strong invariance holds! What if across groups AND time?
+
+
+
+
+# HSLS ONLY
+
+```{r}
+# hsls_time <-  '
+#   math_T1 =~ NA  * i1 + 
+#             l2_1 * i2 + 
+#             l4_1 * i4 + 
+#             l5_1 * i5
+# 
+#   
+#   # Fixing latent variance to 1, as we freed first factor loading
+#   math_T1 ~~ 1 * math_T1
+#   
+#   # Fixing latent mean to 0 for identification?
+#   math_T1 ~ 0 * 1  
+#   
+#   # Time Point 2
+#   math_T2 =~ NA  * i1_2 + 
+#             l2_2 * i2_2 + 
+#             l4_2 * i4_2 + 
+#             l5_2 * i5_2
+# 
+# 
+# 
+#   # Adding the covariances
+#   i1_2 ~~ i2_2
+#   i2_2 ~~ i4_2
+#     
+#   i1 ~~ i5
+#   i1_2 ~~ i5_2
+#   
+#   # Fixing latent variance to 1, as we freed first factor loading
+#   math_T2 ~~ 1 * math_T2
+#   
+#   # Fixing latent mean to 0 for identification?
+#   math_T2 ~ 0 * 1
+#   
+#   # Correlations across time
+#   math_T1 ~~ math_T2
+#   i1 ~~ i1_2
+#   i2 ~~ i2_2
+#   i4 ~~ i4_2
+#   i5 ~~ i5_2     
+# '
+# 
+# fit_hsls_time  <- cfa(hsls_time, data = hsls, 
+#                      estimator = "MLR", missing = "FIML", se = "robust.mlr")
+# fit_hsls_time
+# head(modindices(fit_hsls_time, sort. = TRUE, free.remove = FALSE))
+# 
+# 
+# s_hsls_time <- summary(fit_hsls_time, fit.measures = TRUE)
+# 
+# 
+
+```
+
+# ELS ONLY
+
+```{r}
+# 
+# els_time <-  '
+#   math_T1 =~ NA  * i1 + 
+#             l2_1 * i2 + 
+#             l3_1 * i3 +
+#             l4_1 * i4 + 
+#             l5_1 * i5
+#           
+#   
+#   # Fixing latent variance to 1, as we freed first factor loading
+#   math_T1 ~~ 1 * math_T1
+#   
+#   # Fixing latent mean to 0 for identification?
+#   math_T1 ~ 0 * 1  
+#   
+#   # Time Point 2
+#   math_T2 =~ NA  * i1_2 + 
+#             l2_2 * i2_2 + 
+#             l3_2 * i3_2 +
+#             l4_2 * i4_2 + 
+#             l5_2 * i5_2
+# 
+#   # Adding the covariances
+#   i1 ~~ i2
+#   i1_2 ~~ i2_2
+#   
+#   i2 ~~ i3
+#   i2_2 ~~ i3_2
+#   
+#   i4 ~~ i5
+#   i4_2 ~~ i5_2
+#   
+#   
+# 
+#   
+#   # Fixing latent variance to 1, as we freed first factor loading
+#   math_T2 ~~ 1 * math_T2
+#   
+#   # Fixing latent mean to 0 for identification?
+#   math_T2 ~ 0 * 1
+#   
+#   # Correlations across time
+#   math_T1 ~~ math_T2
+#   i1 ~~ i1_2
+#   i2 ~~ i2_2
+#   i3 ~~ i3_2
+#   i4 ~~ i4_2
+#   i5 ~~ i5_2     
+# '
+# 
+# fit_els_time  <- cfa(els_time, data = els, 
+#                      estimator = "MLR", missing = "FIML", se = "robust.mlr")
+# fit_els_time
+# head(modindices(fit_els_time, sort. = TRUE, free.remove = FALSE))
+# 
+# s_els_time <- summary(fit_hsls_time, fit.measures = TRUE)
+
+```
+
+# HSLS ONLY WEAK
+
+```{r}
+# 
+# hsls_weak <-  '
+#   math_T1 =~ 1  * i1 + 
+#             l2 * i2 + 
+#             l4 * i4 + 
+#             l5 * i5
+# 
+#   
+#   # Freeing latent variance, as we restrict first factor loading instead
+#   math_T1 ~~ NA * math_T1
+#   
+#   # Fixing latent mean to 0 for identification?
+#   math_T1 ~ 0 * 1  
+#   
+#   # Time Point 2
+#   math_T2 =~ 1  * i1_2 + 
+#             l2 * i2_2 + 
+#             l4 * i4_2 + 
+#             l5 * i5_2
+# 
+# 
+# 
+#   # Adding the covariances
+#   i1 ~~ i2
+#   i1_2 ~~ i2_2
+#   
+#   i2 ~~ i4
+#   i2_2 ~~ i4_2
+#     
+#   i1 ~~ i5
+#   i1_2 ~~ i5_2
+#   
+#   # Freeing latent variance, as we restrict first factor loading
+#   math_T2 ~~ NA * math_T2
+#   
+#   # Fixing latent mean to 0 for identification?
+#   math_T2 ~ 0 * 1
+#   
+#   # Correlations across time
+#   math_T1 ~~ math_T2
+#   i1 ~~ i1_2
+#   i2 ~~ i2_2
+#   i4 ~~ i4_2
+#   i5 ~~ i5_2     
+# '
+# 
+# fit_hsls_weak  <- cfa(hsls_weak, data = hsls, 
+#                      estimator = "MLR", missing = "FIML", se = "robust.mlr")
+# fit_hsls_weak
+# head(modindices(fit_hsls_weak, sort. = TRUE, free.remove = FALSE))
+# 
+# 
+# s_hsls_weak <- summary(fit_hsls_weak, fit.measures = TRUE)
+# 
+
+```
+
+
+
+
