@@ -18,6 +18,11 @@ i5 = Teen certain can master skills in math course
 
 Can understand difficult math class
 
+## Turning warnings off (bad idea)
+```{r}
+options(warn = -1)
+```
+
 ```{r}
 library(dplyr)
 library(lavaan)
