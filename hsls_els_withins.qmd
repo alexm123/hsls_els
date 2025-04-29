@@ -1,0 +1,657 @@
+---
+title: "hsls_els_within"
+format: pdf
+editor: visual
+---
+
+# START
+
+1 = strongly disagree 2 = disagree 3 = agree 4 = strongly agree
+
+i1 = Teen (9th / 11th grader) confident can do excellent job on (fall 2009 / spring 2012) math tests
+
+i2 = Teen (9th / 11th grader) certain can understand (fall 2009 / spring 2012) math textbook
+
+i3 = Can understand difficult math class (ELS ONLY!)
+
+i4 = Teen confident can do an excellent job on math assignments
+
+i5 = Teen certain can master skills in math course
+
+Can understand difficult math class
+
+```{r}
+library(dplyr)
+library(lavaan)
+library(ltm)
+library(sjlabelled)
+library(kableExtra)
+library(sirt)
+library(mirt)  
+library(parallel)
+library(tidyr)
+library(purrr)
+library(semTools)
+
+
+#source("code/download_data.R")
+source("F:/Users/alex/OneDrive/Documents/data/prepare_data.R")
+
+m_items <- paste0("i", 1:5)
+m_items_2 <- paste0(m_items, "_2")
+# get subset of relevant variables
+dat <- dat[, c("stu_id", "sample", "sex", "dropout", m_items, m_items_2)]
+
+dat$mean_score <- c(rowMeans(dat[dat$sample == "ELS", m_items], na.rm = TRUE),
+                    rowMeans(dat[dat$sample == "HSLS", m_items[-3]], na.rm = TRUE))
+dat$mean_score_2 <- c(rowMeans(dat[dat$sample == "ELS", m_items_2], na.rm = TRUE),
+                    rowMeans(dat[dat$sample == "HSLS", m_items_2[-3]], na.rm = TRUE))
+
+```
+
+```{r}
+
+# Creating only HSLS
+hsls <- subset(dat, sample == "HSLS")
+
+hsls_1 <- hsls[, c("i1", "i2", "i4", "i5")]
+head(hsls_1)
+
+hsls_2 <- hsls[, c("i1_2", "i2_2", "i4_2", "i5_2")]
+head(hsls_2)
+
+hsls_1_noNA <- na.omit(hsls_1)
+hsls_2_noNA <- na.omit(hsls_2)
+
+
+# Creating only ELS
+els <- subset(dat, sample == "ELS")
+
+els_1 <- els[, c("i1", "i2", "i3", "i4", "i5")]
+head(els_1)
+
+els_2 <- els[, c("i1_2", "i2_2", "i3_2", "i4_2", "i5_2")]
+head(els_2)
+
+els_1_noNA <- na.omit(els_1)
+els_2_noNA <- na.omit(els_2)
+```
+
+```{r}
+
+cfa_config <-  '
+  group: ELS
+  math =~ NA   * i1 + 
+          el2_1 * i2 + 
+          el3_1 * i3 + 
+          el4_1 * i4 + 
+          el5_1 * i5
+          
+  # Naming the intercepts!       
+  i1 ~ nu1_1 * 1
+  i2 ~ nu2_1 * 1
+  i3 ~ nu3_1 * 1
+  i4 ~ nu4_1 * 1
+  i5 ~ nu5_1 * 1
+  
+  # Naming the residual variances!
+  i1 ~~ theta1_1 * i1
+  i2 ~~ theta2_1 * i2
+  i3 ~~ theta3_1 * i3
+  i4 ~~ theta4_1 * i4
+  i5 ~~ theta5_1 * i5
+  
+  # Adding the covariances
+  i1 ~~ i2
+  i2 ~~ i3
+  
+  # Fixing latent variance to 1, as we freed first factor loading
+  math ~~ 1 * math
+  
+  # Fixing latent mean to 0 for identification?
+  math ~ 0 * 1      
+     
+     
+  group: HSLS
+  math =~ NA   * i1 + 
+          hl2_2 * i2 + 
+          hl4_2 * i4 + 
+          hl5_2 * i5
+          
+  # Naming the intercepts! 
+  i1 ~ nu1_2 * 1
+  i2 ~ nu2_2 * 1
+  i4 ~ nu4_2 * 1
+  i5 ~ nu5_2 * 1
+  
+  # Naming the residual variances!
+  i1 ~~ theta1_2 * i1
+  i2 ~~ theta2_2 * i2
+  i4 ~~ theta4_2 * i4
+  i5 ~~ theta5_2 * i5
+  
+  # Adding the covariances
+    #i1 ~~ i2
+    i2 ~~ i4
+  
+  # Fixing latent variance to 1, as we freed first factor loading
+  math ~~ 1 * math
+  
+  # Fixing latent mean to 0 for identification?
+  math ~ 0 * 1  
+'
+
+fit_config  <- cfa(cfa_config, data = dat, group = "sample", 
+                   estimator = "MLR", missing = "FIML", se = "robust.mlr")
+
+
+s_config <- summary(fit_config, fit.measures = TRUE, standardized = TRUE)
+s_config
+
+mod_indices <- modindices(fit_config, sort. = TRUE, free.remove = FALSE)
+head(mod_indices)
+
+# Just for ELS
+mod_indices_els <- mod_indices[mod_indices$group == "ELS", ]
+head(mod_indices_els)
+
+
+# Just for HSLS 
+mod_indices_hsls <- mod_indices[mod_indices$group == "HSLS", ]
+head(mod_indices_hsls)
+
+```
+
+## HSLS Time Config
+Make sure this matches hsls_els.qmd file for fit_config_comb. DOES
+```{r}
+hsls_config <-  '
+  math_T1 =~ NA  * i1 +
+            l2_1 * i2 +
+           #l3_1 * i3   i3 missing from HSLS
+            l4_1 * i4 +
+            l5_1 * i5
+
+
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_T1 ~~ 1 * math_T1
+
+  # Fixing latent mean to 0 for identification
+  math_T1 ~ 0 * 1
+
+  # Time Point 2
+  math_T2 =~ NA  * i1_2 +
+            l2_2 * i2_2 +
+           #l3_2 * i3_2   i3 missing from HSLS
+            l4_2 * i4_2 +
+            l5_2 * i5_2
+
+
+
+  ## Adding the covariances ##
+  i1 ~~ i2
+  i1_2 ~~ i2_2
+  
+  i1 ~~ i4
+  i1_2 ~~ i4_2
+  
+  i2 ~~ i4
+  i2_2 ~~ i4_2
+
+  i1 ~~ i5
+  i1_2 ~~ i5_2
+
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_T2 ~~ 1 * math_T2
+
+  # Fixing latent mean to 0
+  math_T2 ~ 0 * 1
+
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+'
+
+fit_hsls_config  <- cfa(hsls_config, data = hsls,
+                     estimator = "MLR", missing = "FIML", se = "robust.mlr")
+fit_hsls_config
+head(modindices(fit_hsls_config, sort. = TRUE, free.remove = FALSE))
+
+
+s_hsls_config <- summary(fit_hsls_config, fit.measures = TRUE)
+
+```
+
+## HSLS Time Metric
+```{r}
+# Latent variance and mean set to 1 and 0 in ELS time 1, 
+# free variance, mean set to 0 everywhere else
+
+hsls_time_metric <- '
+
+  #####################
+  # Time Point 1
+  #####################
+  math_t1 =~ l1 * i1 +
+             l2 * i2 +   # Same label as ELS
+             # no i3 in HSLS
+             l4 * i4 +   # Same label as ELS
+             l5 * i5     # Same label as ELS
+
+  # Intercepts
+  i1 ~ 0 * 1
+  i2 ~ hnu2_1 * 1
+  # i3 ~ hnu3_1 * 1 (item not in HSLS)
+  i4 ~ hnu4_1 * 1
+  i5 ~ hnu5_1 * 1
+
+  # Residual variances
+  i1 ~~ htheta1_1 * i1
+  i2 ~~ htheta2_1 * i2
+  # i3 ~~ htheta3_1 * i3 (item not in HSLS)
+  i4 ~~ htheta4_1 * i4
+  i5 ~~ htheta5_1 * i5
+
+  # Free both
+  math_t1 ~~ var_hsls_t1 * math_t1
+  math_t1 ~ mean_hsls_t1 * 1
+
+
+  #####################
+  # Time Point 2
+  #####################
+  math_t2 =~ l1 * i1_2 +
+             l2 * i2_2 +   # Same label as ELS
+             # no i3_2 in HSLS at Time 2
+             l4 * i4_2 +   # Same label as ELS
+             l5 * i5_2     # Same label as ELS
+
+  # Intercepts
+  i1_2 ~ 0 * 1
+  i2_2 ~ hnu2_2 * 1
+  # i3_2 ~ hnu3_2 * 1 (item not in HSLS)
+  i4_2 ~ hnu4_2 * 1
+  i5_2 ~ hnu5_2 * 1
+
+  # Residual variances
+  i1_2 ~~ htheta1_2 * i1_2
+  i2_2 ~~ htheta2_2 * i2_2
+  # i3_2 ~~ htheta3_2 * i3_2 (item not in HSLS)
+  i4_2 ~~ htheta4_2 * i4_2
+  i5_2 ~~ htheta5_2 * i5_2
+
+  # Covariances among items
+  
+  
+  i1 ~~ i5
+  i1_2 ~~ i5_2
+  
+  # i1 ~~ i3
+  # i1_2 ~~ i3_2
+    
+  i1 ~~ i4
+  i1_2 ~~ i4_2
+  
+  i4 ~~ i5
+  i4_2 ~~ i5_2
+
+  # Free latent variance and free latent mean
+  math_t2 ~~ var_hsls_t2 * math_t2
+  math_t2 ~ mean_hsls_t2 * 1
+
+  # Correlations across time
+  math_t1 ~~ math_t2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  # i3 ~~ i3_2 (item not in HSLS)
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+'
+
+fit_hsls_time_metric  <- sem(hsls_time_metric, data = dat,
+                             estimator = "MLR", 
+                             missing = "FIML", se = "robust.mlr")
+
+fitMeasures(fit_hsls_time_metric, c("rmsea", "chisq.scaled", "cfi", "tli", "df", "aic", "bic"))
+
+#head(modindices(fit_hsls_time_metric, sort. = TRUE, free.remove = FALSE))
+
+s_hsls_time_metric <- summary(fit_hsls_time_metric, fit.measures = TRUE, standardized = TRUE)
+s_hsls_time_metric
+#s_both_weak_comb
+```
+
+## HSLS Time Scalar
+```{r}
+# Latent variance and mean set to 1 and 0 in HSLS time 1, 
+# free variance, mean set to 0 everywhere else
+
+hsls_time_scalar <- '
+
+  #####################
+  # Time Point 1
+  #####################
+  math_t1 =~ l1 * i1 +
+             l2 * i2 +   # Same label as ELS
+             # no i3 in HSLS
+             l4 * i4 +   # Same label as ELS
+             l5 * i5     # Same label as ELS
+
+  # Intercepts
+  i1 ~ 0 * 1
+  i2 ~ hnu2_1 * 1
+  # i3 ~ hnu3_1 * 1 (item not in HSLS)
+  i4 ~ hnu4_1 * 1
+  i5 ~ hnu5_1 * 1
+
+  # Residual variances
+  i1 ~~ htheta1_1 * i1
+  i2 ~~ htheta2_1 * i2
+  # i3 ~~ htheta3_1 * i3 (item not in HSLS)
+  i4 ~~ htheta4_1 * i4
+  i5 ~~ htheta5_1 * i5
+
+  # Free both
+  math_t1 ~~ var_hsls_t1 * math_t1
+  math_t1 ~ mean_hsls_t1 * 1
+
+
+  #####################
+  # Time Point 2
+  #####################
+  math_t2 =~ l1 * i1_2 +
+             l2 * i2_2 +   # Same label as ELS
+             # no i3_2 in HSLS at Time 2
+             l4 * i4_2 +   # Same label as ELS
+             l5 * i5_2     # Same label as ELS
+
+  # Intercepts
+  i1_2 ~ 0 * 1
+  i2_2 ~ hnu2_1 * 1
+  # i3_2 ~ hnu3_2 * 1 (item not in HSLS)
+  i4_2 ~ hnu4_1 * 1
+  i5_2 ~ hnu5_1 * 1
+
+  # Residual variances
+  i1_2 ~~ htheta1_2 * i1_2
+  i2_2 ~~ htheta2_2 * i2_2
+  # i3_2 ~~ htheta3_2 * i3_2 (item not in HSLS)
+  i4_2 ~~ htheta4_2 * i4_2
+  i5_2 ~~ htheta5_2 * i5_2
+
+  # Covariances among items
+  
+  
+  i1 ~~ i5
+  i1_2 ~~ i5_2
+  
+  # i1 ~~ i3
+  # i1_2 ~~ i3_2
+    
+  i1 ~~ i4
+  i1_2 ~~ i4_2
+  
+  i4 ~~ i5
+  i4_2 ~~ i5_2
+
+  # Free latent variance and free latent mean
+  math_t2 ~~ var_hsls_t2 * math_t2
+  math_t2 ~ mean_hsls_t2 * 1
+
+  # Correlations across time
+  math_t1 ~~ math_t2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  # i3 ~~ i3_2 (item not in HSLS)
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+'
+
+
+fit_hsls_time_scalar  <- sem(hsls_time_scalar, data = dat,
+                             estimator = "MLR", 
+                             missing = "FIML", se = "robust.mlr")
+#fit_hsls_time_scalar
+
+fitMeasures(fit_hsls_time_metric, c("rmsea", "chisq.scaled", "cfi", "tli", "df", "aic", "bic", "srmr"))
+
+fitMeasures(fit_hsls_time_scalar, c("rmsea", "chisq.scaled", "cfi", "tli", "df", "aic", "bic", "srmr"))
+
+#head(modindices(fit_hsls_time_scalar, sort. = TRUE, free.remove = FALSE))
+
+s_hsls_time_scalar <- summary(fit_hsls_time_scalar, fit.measures = TRUE, standardized = TRUE)
+s_hsls_time_scalar
+
+
+```
+
+
+##ELS Time Config
+```{r}
+els_config <- '  
+  math_T1 =~  l1_1*NA * i1 +
+              l2_1    * i2 +
+              l3_1    * i3 +
+              l4_1    * i4 +
+              l5_1    * i5
+
+
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_T1 ~~ 1 * math_T1
+
+  # Fixing latent mean to 0 for identification?
+  math_T1 ~ 0 * 1
+
+  # Time Point 2
+  math_T2 =~l1_2*NA * i1_2 +
+            l2_2    * i2_2 +
+            l3_2    * i3_2 +
+            l4_2    * i4_2 +
+            l5_2    * i5_2
+
+
+  # Freeing latent variance to 1, as we freed first factor loading
+  math_T2 ~~ 1 * math_T2
+
+  # Fixing latent mean to 0 for identification
+  math_T2 ~ 0 * math_T2
+
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  i1   ~~ i2
+  i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  i2   ~~ i3
+  i2_2 ~~ i3_2
+  
+  #i4 = Teen confident can do an excellent job on math assignments
+  #i5 = Teen certain can master skills in math course
+  i4   ~~ i5
+  i4_2 ~~ i5_2
+'
+
+fit_els_time_config  <- sem(els_config, data = dat,
+                             estimator = "MLR", 
+                             missing = "FIML", se = "robust.mlr")
+
+fitMeasures(fit_els_time_config, c("rmsea", "chisq.scaled", "cfi", "tli", "df", "aic", "bic"))
+
+head(modindices(fit_els_time_config, sort. = TRUE, free.remove = FALSE))
+
+s_els_time_config <- summary(fit_els_time_config, fit.measures = TRUE, standardized = TRUE)
+s_els_time_config
+```
+
+## ELS Time Metric
+```{r}
+els_time_metric <- '  
+  math_T1 =~  l1*NA * i1 +
+              l2*1    * i2 +
+              l3    * i3 +
+              l4    * i4 +
+              l5  * i5
+
+
+  # Free both mean and variance
+  math_T1 ~~ var_els_1 * math_T1
+  math_T1 ~ mean_els_1 * 1
+  
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i2 ~ 0 * 1
+
+  # Time Point 2
+  math_T2 =~l1*NA * i1_2 +
+            l2*1   * i2_2 +
+            l3    * i3_2 +
+            l4    * i4_2 +
+            l5*NA  * i5_2
+
+
+  # Free both mean and variance
+  math_T2 ~~ var_els_2 * math_T2
+  math_T2 ~ mean_els_2 * 1
+
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i2_2 ~ 0 * 1
+  
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  i1   ~~ i2
+  i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  i2   ~~ i3
+  i2_2 ~~ i3_2
+  
+  #i4 = Teen confident can do an excellent job on math assignments
+  #i5 = Teen certain can master skills in math course
+  i4   ~~ i5
+  i4_2 ~~ i5_2
+  
+'
+fit_els_time_metric  <- sem(els_time_metric, data = dat,
+                             estimator = "MLR", 
+                             missing = "FIML", se = "robust.mlr")
+
+fitMeasures(fit_els_time_metric, c("rmsea", "chisq.scaled", "cfi", "tli", "df", "aic", "bic"))
+
+#head(modindices(fit_els_time_metric, sort. = TRUE, free.remove = FALSE))
+
+s_hsls_time_metric <- summary(fit_els_time_metric, fit.measures = TRUE, standardized = TRUE)
+s_hsls_time_metric
+#s_both_weak_comb
+
+
+```
+
+## ELS Time Scalar
+```{r}
+els_time_scalar <- '
+  math_T1 =~  l1*NA * i1 +
+              l2*1    * i2 +
+              l3    * i3 +
+              l4    * i4 +
+              l5    * i5
+
+
+  # Free both mean and variance
+  math_T1 ~~ var_els_1 * math_T1
+  math_T1 ~ mean_els_1 * 1
+  
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i1 ~ int1*1
+  i2 ~    0*1
+  i3 ~ int3*1
+  i4 ~ int4*1
+  i5 ~ int5*1
+
+  # Time Point 2
+  math_T2 =~l1*NA * i1_2 +
+            l2*1    * i2_2 +
+            l3    * i3_2 +
+            l4    * i4_2 +
+            l5  * i5_2
+
+
+  # Free both mean and variance
+  math_T2 ~~ var_els_2 * math_T2
+  math_T2 ~ mean_els_2 * 1
+
+  # Fix fifth intercept to 0 (putnick bornstein 2016)
+  i1_2 ~ int1*1
+  i2_2 ~    0*1
+  i3_2 ~ int3*1
+  i4_2 ~ int4*1
+  i5_2 ~ int5*1
+  
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  i1   ~~ i2
+  i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  i2   ~~ i3
+  i2_2 ~~ i3_2
+  
+  #i4 = Teen confident can do an excellent job on math assignments
+  #i5 = Teen certain can master skills in math course
+  i4   ~~ i5
+  i4_2 ~~ i5_2
+  '
+
+
+
+fit_els_time_scalar  <- sem(els_time_scalar, data = dat,
+                             estimator = "MLR", 
+                             missing = "FIML", se = "robust.mlr")
+#fit_hsls_time_scalar
+
+fitMeasures(fit_els_time_scalar, c("rmsea", "chisq.scaled", "cfi", "tli", "df", "aic", "bic", "srmr"))
+
+#head(modindices(fit_els_time_scalar, sort. = TRUE, free.remove = FALSE))
+
+s_els_time_scalar <- summary(fit_els_time_scalar, fit.measures = TRUE, standardized = TRUE)
+s_els_time_scalar
+
+```
+
+
+
+
+
+
+
