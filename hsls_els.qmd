@@ -3,7 +3,7 @@ title: "hsls_els"
 format: pdf
 editor: visual
 ---
-
+# START
 1 = strongly disagree 2 = disagree 3 = agree 4 = strongly agree
 
 i1 = Teen (9th / 11th grader) confident can do excellent job on (fall 2009 / spring 2012) math tests
@@ -18,10 +18,6 @@ i5 = Teen certain can master skills in math course
 
 Can understand difficult math class
 
-## Turning warnings off (bad idea)
-```{r}
-options(warn = -1)
-```
 
 ```{r}
 library(dplyr)
@@ -31,6 +27,11 @@ library(sjlabelled)
 library(kableExtra)
 library(sirt)
 library(mirt)  
+library(parallel)
+library(tidyr)
+library(purrr)
+library(semTools)
+
 
 #source("code/download_data.R")
 source("F:/Users/alex/OneDrive/Documents/data/prepare_data.R")
@@ -325,17 +326,16 @@ config_comb <-  '
 
 '
 
-
 fit_config_comb  <- cfa(config_comb, data = dat, group = "sample", 
                     estimator = "MLR", missing = "FIML", se = "robust.mlr")
 fit_config_comb
 
 head(modindices(fit_config_comb, sort. = TRUE, free.remove = FALSE))
 
-fitmeasures(fit_config_comb, c("aic", "bic", "cfi", "df"))
+fitmeasures(fit_config_comb, c("rmsea", "chisq.scaled","aic", "bic", "cfi", "df"))
 
 s_config_comb <- summary(fit_config_comb, fit.measures = TRUE)
-parTable(fit_config_comb)
+#parTable(fit_config_comb)
 
 ```
 
@@ -1102,6 +1102,8 @@ s_both_weak_comb <- summary(fit_both_weak_comb, fit.measures = TRUE, standardize
 # WITHIN+BETWEEN STRONG
 
 ```{r}
+
+
 both_strong_comb <- '
 
 ############################################################################
@@ -1568,220 +1570,1495 @@ s_both_strong_comb <- summary(fit_both_strong_partial_ei4, fit.measures = TRUE, 
 
 ```{r}
 
-# els_time <-  '
-#   math_T1 =~ l1_1 * NA  * i1 +
-#             l2_1 * i2 +
-#             l3_1 * i3 +
-#             l4_1 * i4 +
-#             l5_1 * i5
-# 
-# 
-#   # Fixing latent variance to 1, as we freed first factor loading
-#   math_T1 ~~ NA * math_T1
-# 
-#   # Fixing latent mean to 0 for identification?
-#   math_T1 ~ 0 * 1
-# 
-#   # Time Point 2
-#   math_T2 =~ NA  * i1_2 +
-#             l2_2 * i2_2 +
-#             l3_2 * i3_2 +
-#             l4_2 * i4_2 +
-#             l5_2 * i5_2
-# 
-#   # Adding the covariances
-#   i1 ~~ i2
-#   i1_2 ~~ i2_2
-# 
-#   i2 ~~ i3
-#   i2_2 ~~ i3_2
-# 
-#   i4 ~~ i5
-#   i4_2 ~~ i5_2
-# 
-# 
-# 
-# 
-#   # Fixing latent variance to 1, as we freed first factor loading
-#   math_T2 ~~ NA * math_T2
-# 
-#   # Fixing latent mean to 0 for identification?
-#   math_T2 ~ 0 * 1
-# 
-#   # Correlations across time
-#   math_T1 ~~ math_T2
-#   i1 ~~ i1_2
-#   i2 ~~ i2_2
-#   i3 ~~ i3_2
-#   i4 ~~ i4_2
-#   i5 ~~ i5_2
-# '
-# 
-# fit_els_time  <- cfa(els_time, data = els,
-#                      estimator = "MLR", missing = "FIML", se = "robust.mlr")
-# fit_els_time
-# head(modindices(fit_els_time, sort. = TRUE, free.remove = FALSE))
-# 
-# s_els_time <- summary(fit_els_time, fit.measures = TRUE, standardized = TRUE)
+els_time <-  '
+  math_T1 =~  l1_1*NA * i1 +
+              l2_1 * i2 +
+              l3_1 * i3 +
+              l4_1 * i4 +
+              l5_1 * i5
 
 
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_T1 ~~ 1 * math_T1
+
+  # Fixing latent mean to 0 for identification?
+  math_T1 ~ 0 * 1
+
+  # Time Point 2
+  math_T2 =~l1_2*NA * i1_2 +
+            l2_2 * i2_2 +
+            l3_2 * i3_2 +
+            l4_2 * i4_2 +
+            l5_2 * i5_2
+
+  # Adding the covariances
+  i1 ~~ i2
+  i1_2 ~~ i2_2
+
+  i2 ~~ i3
+  i2_2 ~~ i3_2
+
+  i4 ~~ i5
+  i4_2 ~~ i5_2
+
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_T2 ~~ 1 * math_T2
+
+  # Fixing latent mean to 0 for identification?
+  math_T2 ~ 0 * 1
+
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+'
+
+suppressWarnings(
+  fit_els_time <- cfa(els_time, data = els,
+                       estimator = "MLR", missing = "FIML", se = "robust.mlr")
+)
+fit_els_time
+
+s_els_time <- summary(fit_els_time, fit.measures = TRUE, standardized = TRUE)
+head(modindices(fit_els_time, sort. = TRUE, free.remove = FALSE))
+fitMeasures(fit_els_time, c("srmr", "rmsea", "chisq.scaled", "cfi"))
 
 ```
 
 
-# K-fold validation
+# K-fold validation on ELS and HSLS
 ```{r}
 library(caret)
+set.seed(42)
 
 k <- 10  # Number of folds
-set.seed(42)
-folds <- createFolds(dat$sample, k = k, list = TRUE)
-
-cfi_list <- numeric(k)
-rmsea_list <- numeric(k)
-srmr_list <- numeric(k)
-chisq_list <- numeric(k)
-
+folds <- createFolds(els$stu_id, k = 10, list = TRUE, returnTrain = FALSE)
 for (i in seq_along(folds)) {
-  # Split into training and validation
-  validation_indices <- folds[[i]]
-  train_data <- dat[-validation_indices, ]
-  validation_data <- dat[validation_indices, ]
-  
-  # Fit model on training set
-  fit_train <- fit_train <- sem(both_strong_partial_ei4, data = train_data, 
-                                group = "sample", 
-                                estimator = "MLR", 
-                                missing = "FIML", 
-                                se = "robust.mlr")
-  
-  # Fit model on validation set using training constraints
-  fit_validation <- fit_validation <- sem(both_strong_partial_ei4, 
-                                          data = validation_data, 
-                                          group = "sample", 
-                                          estimator = "MLR", 
-                                          missing = "FIML", se = "robust.mlr")
-  
-  # Extract fit measures for the validation set
-  cfi_list[i] <- fitMeasures(fit_validation, "cfi")
-  rmsea_list[i] <- fitMeasures(fit_validation, "rmsea")
-  srmr_list[i] <- fitMeasures(fit_validation, "srmr")
-  chisq_list[i] <- fitMeasures(fit_validation, "chisq.scaled")
+  fold_name <- paste0("fold_", i)             # Create object name, e.g., "fold_1"
+  assign(fold_name, els[folds[[i]], ])  # Assign the subset to that name
 }
 
-fit_measures_summary <- data.frame(
-  Fold = seq_len(k),
-  CFI = cfi_list,
-  RMSEA = rmsea_list,
-  SRMR = srmr_list,
-  chisquare = chisq_list
+hsls_folds <- createFolds(hsls$stu_id, k = 10, list= TRUE, returnTrain = FALSE)
+for (i in seq_along(hsls_folds)) {
+  fold_name <- paste0("hsls_fold_", i)             # Create object name, e.g., "fold_1"
+  assign(fold_name, hsls[hsls_folds[[i]], ])  # Assign the subset to that name
+}
+
+```
+
+## Making sure they are roughly equal sex items answered 
+```{r}
+for (i in 1:10) {
+  # Construct the object name
+  fold_name <- paste0("fold_", i)
+  # Retrieve the dataset from the environment
+  current_fold <- get(fold_name)
+  
+  # Print the fold number and a table of the 'sex' variable
+  cat("Fold", i, "\n")
+  print(table(current_fold$sex))
+}
+# Loop over the folds and print non-NA counts for each question
+for (i in 1:10) {
+  # Construct the object name (e.g., "fold_1")
+  fold_name <- paste0("fold_", i)
+  
+  # Retrieve the fold data frame using get()
+  current_fold <- get(fold_name)
+  
+  # Identify the item columns (assuming they all start with "i")
+  item_cols <- grep("^i", names(current_fold), value = TRUE)
+  
+  # Count the number of non-NA responses for each item column
+  nonNA_counts <- colSums(!is.na(current_fold[, item_cols]))
+  
+  # Print the fold number and the counts
+  cat("Fold", i, ":\n")
+  print(nonNA_counts)
+  cat("\n")
+}
+```
+
+
+## Creating config models for all
+```{r}
+
+config_els <- '  
+  math_T1 =~  l1_1*NA * i1 +
+              l2_1    * i2 +
+              l3_1    * i3 +
+              l4_1    * i4 +
+              l5_1    * i5
+
+
+  # Fixing latent variance to 1
+  math_T1 ~~ 1 * math_T1
+
+  # Fixing latent mean to 0
+  math_T1 ~ 0*1
+
+  # Time Point 2
+  math_T2 =~l1_2*NA * i1_2 +
+            l2_2    * i2_2 +
+            l3_2    * i3_2 +
+            l4_2    * i4_2 +
+            l5_2    * i5_2
+
+
+  # Freeing latent variance to 1, as we fixed fifth factor loading
+  math_T2 ~~ 1 * math_T2
+
+  # Fixing latent mean to 0
+  math_T2 ~ 0*1
+
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+'
+
+config_hsls <- '  
+  math_T1 =~  l1_1*NA * i1 +
+              l2_1    * i2 +
+              l4_1    * i4 +
+              l5_1    * i5
+
+
+  # Fixing latent variance to 1
+  math_T1 ~~ 1 * math_T1
+
+  # Fixing latent mean to 0
+  math_T1 ~ 0*1
+
+  # Time Point 2
+  math_T2 =~l1_2*NA * i1_2 +
+            l2_2    * i2_2 +
+            l4_2    * i4_2 +
+            l5_2    * i5_2
+
+
+  # Freeing latent variance to 1, as we fixed fifth factor loading
+  math_T2 ~~ 1 * math_T2
+
+  # Fixing latent mean to 0
+  math_T2 ~ 0*1
+
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+'
+
+
+list_of_els <- mget(paste0("fold_", 1:10))
+list_of_hsls <- mget(paste0("hsls_fold_", 1:10))
+
+fooo <- lavaan::sem(config_els, list_of_els$fold_1, meanstructure = TRUE)
+bar <- lavaan::sem(config_hsls, list_of_hsls$hsls_fold_1, meanstructure = TRUE)
+
+summary(fooo, standardized = TRUE)
+summary(bar, standardized = TRUE)
+```
+#.
+# CFA FUNCTION
+#.
+ ## Running and comparing MI's of all config_els
+```{r}
+RunCFA <- function(model, dat, test = FALSE) {
+  # run with test TRUE for faster computation!
+  if (test){
+    res <- lavaan::sem(model, dat)
+  } else{
+    res <- lavaan::sem(model = model, 
+               data = dat,
+               estimator = "MLR", 
+               missing = "FIML",
+               se = "standard")
+  }
+  return(list(model = res))
+}
+# Determine number of cores
+num_cores <- parallel::detectCores() - 1  # Use all but one core
+
+# Run CFA in parallel (Windows)
+cl <- parallel::makeCluster(num_cores)
+parallel::clusterExport(cl, varlist = c("RunCFA", "config_els", "list_of_els",
+                                        "config_hsls", "list_of_hsls"))  # Export function & model
+
+els_config_results <- parallel::parLapply(cl, list_of_els, function(dat) {
+  RunCFA(config_els, dat, test = FALSE)
+})
+hsls_config_results <- parallel::parLapply(cl, list_of_hsls, function(dat) {
+  RunCFA(config_hsls, dat, test = FALSE)
+})
+
+
+stopCluster(cl)  # Stop cluster
+
+els_config_results$fold_2$model
+hsls_config_results$hsls_fold_3$model
+
+#summary(hsls_config_results$hsls_fold_3$model)
+
+```
+
+## Inspect MI of each Config ELS model
+
+```{r}
+# Look at top 10 MI's of each model
+lapply(els_config_results, function(result) {
+  mi <- lavaan::modindices(result$model, sort. = TRUE, free.remove = FALSE)
+  head(mi, 5)
+})
+
+
+# Look at the top 3 MI of each model, and how often these are 1st, 2nd ,or 3rd
+do.call(rbind, lapply(els_config_results, function(result) {
+  mi <- lavaan::modindices(result$model, sort = TRUE)
+  top3 <- head(mi, 3)
+  top3$rank <- 1:3
+  top3$parameter <- paste(top3$lhs, top3$op, top3$rhs)
+  top3
+  })) %>%
+  group_by(parameter, rank) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  tidyr::pivot_wider(names_from = rank, values_from = count, names_prefix = "Rank_") %>%
+  print()
+
+# i1 ~~ i2 8 times in 1st
+# i4 ~~ i5 6 times in 2nd
+
+
+
+lapply(hsls_config_results, function(result) {
+  mi <- lavaan::modindices(result$model, sort. = TRUE, free.remove = FALSE)
+  head(mi, 5)
+})
+do.call(rbind, lapply(hsls_config_results, function(result) {
+  mi <- lavaan::modindices(result$model, sort = TRUE)
+  top3 <- head(mi, 3)
+  top3$rank <- 1:3
+  top3$parameter <- paste(top3$lhs, top3$op, top3$rhs)
+  top3
+  })) %>%
+  group_by(parameter, rank) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  tidyr::pivot_wider(names_from = rank, values_from = count, names_prefix = "Rank_") %>%
+  print()
+
+head(modindices(hsls_config_results$hsls_fold_1$model, sort = TRUE))
+# i1 ~~ i5 8 times in 1st
+```
+
+## Adding covariances, already found through MI's
+```{r}
+config_els <- '  
+  math_T1 =~  l1_1*NA * i1 +
+              l2_1    * i2 +
+              l3_1    * i3 +
+              l4_1    * i4 +
+              l5_1    * i5
+
+
+  # Fixing latent variance to 1, as we freed first factor loading
+  math_T1 ~~ 1 * math_T1
+
+  # Fixing latent mean to 0 for identification?
+  math_T1 ~ 0 * math_T1
+
+  # Time Point 2
+  math_T2 =~l1_2*NA * i1_2 +
+            l2_2    * i2_2 +
+            l3_2    * i3_2 +
+            l4_2    * i4_2 +
+            l5_2    * i5_2
+
+
+  # Freeing latent variance to 1, as we freed first factor loading
+  math_T2 ~~ 1 * math_T2
+
+  # Fixing latent mean to 0 for identification
+  math_T2 ~ 0 * math_T2
+
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  i1   ~~ i2
+  i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  i2   ~~ i3
+  i2_2 ~~ i3_2
+  
+  #i4 = Teen confident can do an excellent job on math assignments
+  #i5 = Teen certain can master skills in math course
+  i4   ~~ i5
+  i4_2 ~~ i5_2
+  
+'
+
+config_hsls <-  '  
+  math_T1 =~  l1_1*NA * i1 +
+              l2_1    * i2 +
+              l4_1    * i4 +
+              l5_1    * i5
+
+
+  # Fixing latent variance to 1
+  math_T1 ~~ 1 * math_T1
+
+  # Fixing latent mean to 0
+  math_T1 ~ 0*1
+
+  # Time Point 2
+  math_T2 =~l1_2*NA * i1_2 +
+            l2_2    * i2_2 +
+            l4_2    * i4_2 +
+            l5_2    * i5_2
+
+
+  # Freeing latent variance to 1, as we fixed fifth factor loading
+  math_T2 ~~ 1 * math_T2
+
+  # Fixing latent mean to 0
+  math_T2 ~ 0*1
+
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+    
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  # i1   ~~ i2
+  # i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  # i2   ~~ i3
+  # i2_2 ~~ i3_2
+  
+  #i1 = i1 = Teen confident can do excellent job on (fall 2009 / spring 2012) math tests
+  #i5 = Teen certain can master skills in math course
+  i1   ~~ i5
+  i1_2 ~~ i5_2
+  
+'
+
+
+
+```
+
+## Run and inspect again
+```{r}
+cl <- parallel::makeCluster(num_cores)
+parallel::clusterExport(cl, varlist = c("RunCFA", "config_els", "list_of_els"))  # Export function & model
+
+els_config_results <- parallel::parLapply(cl, list_of_els, function(dat) {
+  RunCFA(config_els, dat, test = FALSE)
+})
+stopCluster(cl)  # Stop cluster
+
+lapply(els_config_results, function(result) {
+  mi <- lavaan::modindices(result$model, sort. = TRUE, free.remove = FALSE)
+  head(mi, 5)
+})
+
+
+# Look at the top 3 MI of each model, and how often these are 1st, 2nd ,or 3rd
+# 
+do.call(rbind, lapply(els_config_results, function(result) {
+  mi <- lavaan::modindices(result$model, sort = TRUE)
+  top3 <- head(mi, 3)
+  top3$rank <- 1:3
+  top3$parameter <- paste(top3$lhs, top3$op, top3$rhs)
+  top3
+  })) %>%
+  group_by(parameter, rank) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  tidyr::pivot_wider(names_from = rank, values_from = count, names_prefix = "Rank_") %>%
+  print()
+
+
+```
+
+
+## Get fit measures of all els_config and hsls_config
+
+```{r}
+els_config_fit_measures <- data.frame(
+  Fold = names(els_config_results),
+  do.call(rbind, lapply(els_config_results, function(x) 
+    fitMeasures(x$model, c("chisq.scaled", 
+                           "cfi.robust", 
+                           "rmsea.robust", 
+                           "srmr", 
+                           "df"))
+  ))
 )
 
-fit_measures_summary <- rbind(
-  fit_measures_summary,
+hsls_config_fit_measures <- data.frame(
+  Fold = names(hsls_config_results),
+  do.call(rbind, lapply(hsls_config_results, function(x)
+    fitMeasures(x$model, c("chisq.scaled", 
+                           "cfi.robust", 
+                           "rmsea.robust", 
+                           "srmr", 
+                           "df"))
+  ))
+)
+```
+
+
+## Metric Invariance
+Referent / Marker item was chosen as LavScoreTest lowest chisquare
+```{r}
+
+metric_els <- '  
+  math_T1 =~  l1*NA * i1 +
+              l2*1    * i2 +
+              l3    * i3 +
+              l4    * i4 +
+              l5  * i5
+
+
+  # Free both mean and variance
+  math_T1 ~~ var_els_1 * math_T1
+  math_T1 ~ mean_els_1 * 1
+  
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i2 ~ 0 * 1
+
+  # Time Point 2
+  math_T2 =~l1*NA * i1_2 +
+            l2*1   * i2_2 +
+            l3    * i3_2 +
+            l4    * i4_2 +
+            l5*NA  * i5_2
+
+
+  # Free both mean and variance
+  math_T2 ~~ var_els_2 * math_T2
+  math_T2 ~ mean_els_2 * 1
+
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i2_2 ~ 0 * 1
+  
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  i1   ~~ i2
+  i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  i2   ~~ i3
+  i2_2 ~~ i3_2
+  
+  #i4 = Teen confident can do an excellent job on math assignments
+  #i5 = Teen certain can master skills in math course
+  i4   ~~ i5
+  i4_2 ~~ i5_2
+  
+'
+metric_hsls <- '  
+  math_T1 =~  l1*NA * i1 +
+              l2*1    * i2 +
+              l4    * i4 +
+              l5  * i5
+
+
+  # Free both mean and variance
+  math_T1 ~~ var_hsls_1 * math_T1
+  math_T1 ~ mean_hsls_1 * 1
+  
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i2 ~ 0 * 1
+
+  # Time Point 2
+  math_T2 =~l1*NA * i1_2 +
+            l2*1   * i2_2 +
+            l4    * i4_2 +
+            l5*NA  * i5_2
+
+
+  # Free both mean and variance
+  math_T2 ~~ var_els_2 * math_T2
+  math_T2 ~ mean_els_2 * 1
+
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i2_2 ~ 0 * 1
+  
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  #i1 = i1 = Teen confident can do excellent job on (fall 2009 / spring 2012) math tests
+  #i5 = Teen certain can master skills in math course
+  i1   ~~ i5
+  i1_2 ~~ i5_2
+  
+'
+
+
+fooo <- RunCFA(metric_els, fold_1)
+summary(fooo$model, standardized = TRUE)
+
+cl <- parallel::makeCluster(num_cores)
+parallel::clusterExport(cl, varlist = c("RunCFA", "metric_els", "list_of_els",
+                                        "metric_hsls", "list_of_hsls"))
+#
+els_metric_results <- parallel::parLapply(cl, list_of_els, function(dat) {
+  RunCFA(metric_els, dat, test = FALSE)
+  })
+
+hsls_metric_results <- parallel::parLapply(cl, list_of_hsls, function(dat) {
+  RunCFA(metric_hsls, dat, test = FALSE)
+  })
+
+stopCluster(cl)  # Stop cluster
+
+summary(els_metric_results$fold_1$model, standardized = TRUE, fit.measures =TRUE)
+```
+
+## Get fit measures of all els_metric
+Cut offs used were: d_CFI = -0.01, d_RMSEA = 0.015, d_SRMR = 0.03
+```{r}
+els_metric_fit_measures <- data.frame(
+  Fold = names(els_metric_results),
+  do.call(rbind, lapply(els_metric_results, function(x) 
+    fitMeasures(x$model, c("chisq.scaled", 
+                           "cfi.robust", 
+                           "rmsea.robust", 
+                           "srmr", 
+                           "df"))
+  ))
+)
+
+hsls_metric_fit_measures <- data.frame(
+  Fold = names(hsls_metric_results),
+  do.call(rbind, lapply(hsls_metric_results, function(x) 
+    fitMeasures(x$model, c("chisq.scaled", 
+                           "cfi.robust", 
+                           "rmsea.robust", 
+                           "srmr", 
+                           "df"))
+  ))
+)
+
+
+
+
+```
+
+
+
+## Determine Invariance for metric
+Cut offs used were: d_CFI = -0.01, d_RMSEA = 0.015, d_SRMR = 0.03
+```{r}
+diff_metric_config_results <- sapply(names(els_config_results), function(fold) {
+  # Extract fit measures for configural and metric models
+  fit_config <- lavaan::fitMeasures(els_config_results[[fold]]$model, 
+                                    c("chisq.scaled", 
+                                      "cfi.robust", 
+                                      "rmsea.robust", 
+                                      "srmr"))
+  
+  fit_metric <- lavaan::fitMeasures(els_metric_results[[fold]]$model, 
+                                    c("chisq.scaled", 
+                                      "cfi.robust",
+                                      "rmsea.robust",
+                                      "srmr"))
+  # Compute the differences (metric - configural)
+  fit_diff <- fit_metric - fit_config
+  return(fit_diff)
+})
+
+# Convert to a more readable format
+diff_metric_config_results <- as.data.frame(t(diff_metric_config_results))
+colnames(diff_metric_config_results) <- c("Delta_ChiSq", 
+                                          "Delta_CFI", 
+                                          "Delta_RMSEA",
+                                          "Delta_SRMR")
+summary(els_config_results$fold_1$model, standardized = TRUE)
+summary(els_metric_results$fold_1$model, standardized = TRUE)
+
+lavTestScore(els_metric_results$fold_1$model)
+
+# Print the results
+print(diff_metric_config_results)
+# Extract fit measures from both models
+config_values <- sapply(names(els_config_results), function(fold) {
+  lavaan::fitMeasures(els_config_results[[fold]]$model, c("chisq", "cfi", "rmsea"))
+})
+
+metric_values <- sapply(names(els_metric_results), function(fold) {
+  lavaan::fitMeasures(els_metric_results[[fold]]$model, c("chisq", "cfi", "rmsea"))
+})
+
+# Convert to data frames
+config_df <- as.data.frame(t(config_values))
+metric_df <- as.data.frame(t(metric_values))
+rownames(config_df) <- paste0("config_", rownames(config_df))
+rownames(metric_df) <- paste0("metric_", rownames(metric_df))
+
+diff_metric_config_test <- sapply(names(els_config_results), function(fold) {
+  lavaan::lavTestLRT(els_config_results[[fold]]$model, els_metric_results[[fold]]$model)
+})
+diff_metric_config_test <- as.data.frame(diff_metric_config_test) %>% t()
+
+metric_models <- list(
+  els_metric_results$fold_1$model,
+  els_metric_results$fold_2$model,
+  els_metric_results$fold_3$model,
+  els_metric_results$fold_4$model,
+  els_metric_results$fold_5$model,
+  els_metric_results$fold_6$model,
+  els_metric_results$fold_7$model,
+  els_metric_results$fold_8$model,
+  els_metric_results$fold_9$model,
+  els_metric_results$fold_10$model
+)
+
+get_significant_constraint <- function(model) {
+  test_results <- lavTestScore(model)$uni  # Extract univariate score test results
+  if (is.null(test_results) || nrow(test_results) == 0) return(NULL)  # Handle cases where no constraints exist
+  
+  significant_results <- test_results[test_results$p.value < 0.05, ]  # Filter only significant constraints
+  if (nrow(significant_results) == 0) return(NULL)  # Return NULL if no constraints are significant
+  
+  most_significant <- significant_results[which.min(significant_results$p.value), ]  # Find row with lowest p-value
+  return(significant_results)
+}
+
+significant_constraints_metric <- lapply(metric_models,
+                                         get_significant_constraint)
+
+# Convert to a data frame for easier viewing
+significant_constraints_metric_df <- do.call(rbind,
+                                             significant_constraints_metric)
+
+lavTestScore(els_metric_results$fold_1$model)$uni
+lavTestScore(els_metric_results$fold_2$model)$uni
+lavTestScore(els_metric_results$fold_3$model)$uni
+lavTestScore(els_metric_results$fold_4$model)$uni
+lavTestScore(els_metric_results$fold_5$model)$uni
+lavTestScore(els_metric_results$fold_6$model)$uni
+lavTestScore(els_metric_results$fold_7$model)$uni
+lavTestScore(els_metric_results$fold_9$model)$uni
+lavTestScore(els_metric_results$fold_10$model)$uni
+
+folds <- c("fold_1", "fold_2", "fold_3", "fold_4", "fold_5", "fold_6", "fold_7", "fold_9", "fold_10")
+best_params_metric <- do.call(rbind, lapply(folds, function(f) {
+  uni <- lavTestScore(els_metric_results[[f]]$model)$uni
+  best <- uni[which.max(uni$X2), ]
+  data.frame(fold = f, param = paste(best$lhs, best$op, best$rhs), X2 = best$X2)
+}))
+table(best_params_metric$param)
+
+
+sum(highest_constraints_df$lhs == ".p4." & highest_constraints_df$rhs == ".p12.")
+
+
+lavTestLRT(els_config_results$fold_1$model, els_metric_results$fold_1$model)
+
+
+
+```
+
+## Scalar Invariance
+```{r}
+scalar_els <- '  
+  math_T1 =~  l1*NA * i1 +
+              l2*1    * i2 +
+              l3    * i3 +
+              l4    * i4 +
+              l5    * i5
+
+
+  # Free both mean and variance
+  math_T1 ~~ var_els_1 * math_T1
+  math_T1 ~ mean_els_1 * 1
+  
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i1 ~ int1*1
+  i2 ~    0*1
+  i3 ~ int3*1
+  i4 ~ int4*1
+  i5 ~ int5*1
+
+  # Time Point 2
+  math_T2 =~l1*NA * i1_2 +
+            l2*1    * i2_2 +
+            l3    * i3_2 +
+            l4    * i4_2 +
+            l5  * i5_2
+
+
+  # Free both mean and variance
+  math_T2 ~~ var_els_2 * math_T2
+  math_T2 ~ mean_els_2 * 1
+
+  # Fix fifth intercept to 0 (putnick bornstein 2016)
+  i1_2 ~ int1*1
+  i2_2 ~    0*1
+  i3_2 ~ int3*1
+  i4_2 ~ int4*1
+  i5_2 ~ int5*1
+  
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  i1   ~~ i2
+  i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  i2   ~~ i3
+  i2_2 ~~ i3_2
+  
+  #i4 = Teen confident can do an excellent job on math assignments
+  #i5 = Teen certain can master skills in math course
+  i4   ~~ i5
+  i4_2 ~~ i5_2
+  
+'
+
+scalar_hsls <- '  
+  math_T1 =~  l1*NA * i1 +
+              l2*1    * i2 +
+              l4    * i4 +
+              l5  * i5
+
+
+  # Free both mean and variance
+  math_T1 ~~ var_hsls_1 * math_T1
+  math_T1 ~ mean_hsls_1 * 1
+
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i1 ~ int1*1
+  i2 ~    0*1
+  i4 ~ int4*1
+  i5 ~ int5*1
+  
+  # Time Point 2
+  math_T2 =~l1*NA * i1_2 +
+            l2*1   * i2_2 +
+            l4    * i4_2 +
+            l5*NA  * i5_2
+
+
+  # Free both mean and variance
+  math_T2 ~~ var_els_2 * math_T2
+  math_T2 ~ mean_els_2 * 1
+
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i2_2 ~ 0 * 1
+  
+  # Fix 2nd intercept to 0 (putnick bornstein 2016)
+  i1_2 ~ int1*1
+  i2_2 ~    0*1
+  i4_2 ~ int4*1
+  i5_2 ~ int5*1
+  
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  #i1 = i1 = Teen confident can do excellent job on (fall 2009 / spring 2012) math tests
+  #i5 = Teen certain can master skills in math course
+  i1   ~~ i5
+  i1_2 ~~ i5_2
+  
+'
+hsls_full_metric_results <- RunCFA(metric_hsls, hsls)
+hsls_full_scalar_results <- RunCFA(scalar_hsls, hsls)
+
+
+# fooo <- RunCFA(scalar_els, fold_1)
+# summary(fooo$model, standardized = TRUE)
+
+cl <- parallel::makeCluster(num_cores)
+parallel::clusterExport(cl, varlist = c("RunCFA", "scalar_els", "list_of_els",
+                                        "scalar_hsls", "list_of_hsls"))
+
+els_scalar_results <- parallel::parLapply(cl, list_of_els, function(dat) {
+  RunCFA(scalar_els, dat, test = FALSE)
+})
+hsls_scalar_results <- parallel::parLapply(cl, list_of_hsls, function(dat) {
+  RunCFA(scalar_hsls, dat, test = FALSE)
+})
+
+
+stopCluster(cl)  # Stop cluster
+# 
+# summary(els_scalar_results$fold_1$model, standardized = TRUE)
+
+```
+
+## Get fit measures of all els_scalar
+```{r}
+els_scalar_fit_measures <- data.frame(
+  Fold = names(els_scalar_results),
+  do.call(rbind, lapply(els_scalar_results, function(x) 
+    fitMeasures(x$model, c("chisq.scaled", 
+                           "cfi.robust", 
+                           "rmsea.robust", 
+                           "srmr", 
+                           "df"))
+  ))
+)
+
+hsls_scalar_fit_measures <- data.frame(
+  Fold = names(hsls_scalar_results),
+  do.call(rbind, lapply(hsls_scalar_results, function(x) 
+    fitMeasures(x$model, c("chisq.scaled", 
+                           "cfi.robust", 
+                           "rmsea.robust", 
+                           "srmr", 
+                           "df"))
+  ))
+)
+
+
+lavTestScore(els_scalar_results$fold_10$model)$uni
+
+best_params_scalar <- do.call(rbind, lapply(folds, function(f) {
+  uni <- lavTestScore(els_scalar_results[[f]]$model)$uni
+  best <- uni[which.max(uni$X2), ]
+  data.frame(fold = f, param = paste(best$lhs, best$op, best$rhs), X2 = best$X2)
+}))
+table(best_params_scalar$param)
+
+```
+
+## Strict Invariance
+
+```{r}
+strict_els <- '  
+  math_T1 =~  l1*NA * i1 +
+              l2    * i2 +
+              l3    * i3 +
+              l4    * i4 +
+              l5*1    * i5
+
+
+  # Free both mean and variance
+  math_T1 ~~ var_els_1 * math_T1
+  math_T1 ~ mean_els_1 * 1
+  
+  # Fix fifth intercept to 0 (putnick bornstein 2016)
+  i1 ~ int1*1
+  i2 ~ int2*1
+  i3 ~ int3*1
+  i4 ~ int4*1
+  i5 ~ 0 * 1
+  
+  # Constrain residual variances to be equal
+  i1 ~~ e1*i1
+  i2 ~~ e2*i2
+  i3 ~~ e3*i3
+  i4 ~~ e4*i4
+  i5 ~~ e5*i5
+  
+  # Time Point 2
+  math_T2 =~l1*NA * i1_2 +
+            l2    * i2_2 +
+            l3    * i3_2 +
+            l4    * i4_2 +
+            l5*1  * i5_2
+
+
+  # Free both mean and variance
+  math_T2 ~~ var_els_2 * math_T2
+  math_T2 ~ mean_els_2 * 1
+
+  # Fix fifth intercept to 0 (putnick bornstein 2016)
+  i1_2 ~ int1*1
+  i2_2 ~ int2*1
+  i3_2 ~ int3*1
+  i4_2 ~ int4*1
+  i5_2 ~ 0 * 1
+  
+  # Constrain residual variances to be equal
+  i1_2 ~~ e1*i1_2
+  i2_2 ~~ e2*i2_2
+  i3_2 ~~ e3*i3_2
+  i4_2 ~~ e4*i4_2 
+  i5_2 ~~ e5*i5_2
+  
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  i1   ~~ i2
+  i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  i2   ~~ i3
+  i2_2 ~~ i3_2
+  
+  #i4 = Teen confident can do an excellent job on math assignments
+  #i5 = Teen certain can master skills in math course
+  i4   ~~ i5
+  i4_2 ~~ i5_2
+  
+'
+# fooo <- RunCFA(strict_els, fold_1)
+# summary(fooo$model, standardized = TRUE)
+
+cl <- parallel::makeCluster(num_cores)
+parallel::clusterExport(cl, varlist = c("RunCFA", "strict_els", "list_of_els"))
+
+els_strict_results <- parallel::parLapply(cl, list_of_els, function(dat) {
+  RunCFA(strict_els, dat, test = FALSE)
+})
+stopCluster(cl)  # Stop cluster
+
+summary(els_strict_results$fold_1$model, standardized = TRUE)
+```
+
+## Get fit measures of all els_strict
+```{r}
+els_strict_fit_measures <- data.frame(
+  Fold = names(els_strict_results),
+  do.call(rbind, lapply(els_strict_results, function(x) 
+    fitMeasures(x$model, c("chisq.scaled", 
+                           "cfi.robust", 
+                           "rmsea.robust", 
+                           "srmr", 
+                           "df"))
+  ))
+)
+```
+
+
+## Examine fit measures visually
+```{r}
+
+temp_df <- purrr::map_dfr(1:10, function(i) {
+  fold <- paste0("fold_", i)
   data.frame(
-    Fold = "Mean",
-    CFI = mean(cfi_list),
-    RMSEA = mean(rmsea_list),
-    SRMR = mean(srmr_list),
-    chisquare = mean(chisq_list)
-  ),
-  data.frame(
-    Fold = "SD",
-    CFI = sd(cfi_list),
-    RMSEA = sd(rmsea_list),
-    SRMR = sd(srmr_list),
-    chisquare = sd(chisq_list)
+    fold = fold,
+    invariance = factor(c("Config", "Weak", "Strong", "Strict"), 
+                        levels = c("Config", "Weak", "Strong", "Strict")),
+    chisq_scaled = c(
+      fitMeasures(els_config_results[[fold]]$model, "chisq.scaled"),
+      fitMeasures(els_metric_results[[fold]]$model, "chisq.scaled"),
+      fitMeasures(els_scalar_results[[fold]]$model, "chisq.scaled"),
+      fitMeasures(els_strict_results[[fold]]$model, "chisq.scaled")
+    ),
+    cfi_robust = c(
+      fitMeasures(els_config_results[[fold]]$model, "cfi.robust"),
+      fitMeasures(els_metric_results[[fold]]$model, "cfi.robust"),
+      fitMeasures(els_scalar_results[[fold]]$model, "cfi.robust"),
+      fitMeasures(els_strict_results[[fold]]$model, "cfi.robust")
+    ),
+    rmsea_robust = c(
+      fitMeasures(els_config_results[[fold]]$model, "rmsea.robust"),
+      fitMeasures(els_metric_results[[fold]]$model, "rmsea.robust"),
+      fitMeasures(els_scalar_results[[fold]]$model, "rmsea.robust"),
+      fitMeasures(els_strict_results[[fold]]$model, "rmsea.robust")
+    )
   )
+})
+# Graph for chisq.scaled
+p_chisq <- ggplot(temp_df, aes(x = invariance, y = chisq_scaled, colour = fold, group = fold)) +
+  geom_point(size = 3) +
+  geom_line() +
+  labs(x = "Invariance Model", y = "Chi-square (scaled)",
+       title = "Chi-square (scaled) Across Invariance Models by Fold") +
+  theme_minimal()
+
+# Graph for cfi.robust
+p_cfi <- ggplot(temp_df, aes(x = invariance, y = cfi_robust, colour = fold, group = fold)) +
+  geom_point(size = 3) +
+  geom_line() +
+  labs(x = "Invariance Model", y = "CFI (robust)",
+       title = "CFI (robust) Across Invariance Models by Fold") +
+  theme_minimal()
+
+# Graph for rmsea.robust
+p_rmsea <- ggplot(temp_df, aes(x = invariance, y = rmsea_robust, colour = fold, group = fold)) +
+  geom_point(size = 3) +
+  geom_line() +
+  labs(x = "Invariance Model", y = "RMSEA (robust)",
+       title = "RMSEA (robust) Across Invariance Models by Fold") +
+  theme_minimal()
+
+# Display the graphs
+print(p_chisq)
+print(p_cfi)
+print(p_rmsea)
+
+# Build a data frame with RMSEA and its CI for each fold and invariance level
+temp_df <- map_dfr(1:10, function(i) {
+  fold <- paste0("fold_", i)
+  data.frame(
+    fold = fold,
+    invariance = factor(c("Config", "Weak", "Strong", "Strict"),
+                        levels = c("Config", "Weak", "Strong", "Strict")),
+    rmsea_robust = c(
+      fitMeasures(els_config_results[[fold]]$model, "rmsea.robust"),
+      fitMeasures(els_metric_results[[fold]]$model, "rmsea.robust"),
+      fitMeasures(els_scalar_results[[fold]]$model, "rmsea.robust"),
+      fitMeasures(els_strict_results[[fold]]$model, "rmsea.robust")
+    ),
+    rmsea_ci_lower = c(
+      fitMeasures(els_config_results[[fold]]$model, "rmsea.ci.lower.robust"),
+      fitMeasures(els_metric_results[[fold]]$model, "rmsea.ci.lower.robust"),
+      fitMeasures(els_scalar_results[[fold]]$model, "rmsea.ci.lower.robust"),
+      fitMeasures(els_strict_results[[fold]]$model, "rmsea.ci.lower.robust")
+    ),
+    rmsea_ci_upper = c(
+      fitMeasures(els_config_results[[fold]]$model, "rmsea.ci.upper.robust"),
+      fitMeasures(els_metric_results[[fold]]$model, "rmsea.ci.upper.robust"),
+      fitMeasures(els_scalar_results[[fold]]$model, "rmsea.ci.upper.robust"),
+      fitMeasures(els_strict_results[[fold]]$model, "rmsea.ci.upper.robust")
+    )
+  )
+})
+
+# Plot RMSEA with error bars representing the confidence interval
+ggplot(temp_df, aes(x = invariance, 
+                    y = rmsea_robust, 
+                    colour = fold, group = fold)) +
+  geom_errorbar(aes(ymin = rmsea_ci_lower, ymax = rmsea_ci_upper),
+                width = 0.1, position = position_dodge(width = 0.2)) +
+  geom_point(size = 3, position = position_dodge(width = 0.2)) +
+  labs(x = "Invariance Model",
+       y = "RMSEA (robust)",
+       title = "RMSEA (robust) with 95% CI Across Invariance Models by Fold") +
+  theme_minimal()
+```
+
+## Partial Scalar Invariance
+
+```{r}
+modindices(els_scalar_results$fold_2$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+modindices(els_scalar_results$fold_3$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+modindices(els_scalar_results$fold_4$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+modindices(els_scalar_results$fold_5$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+modindices(els_scalar_results$fold_6$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+modindices(els_scalar_results$fold_7$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+modindices(els_scalar_results$fold_8$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+modindices(els_scalar_results$fold_9$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+modindices(els_scalar_results$fold_10$model, sort = TRUE, free.remove = FALSE,
+           op = "~1") %>% head(5)
+
+```
+
+## Determine Invariance of scalar
+Cut offs used were: d_CFI = -0.01, d_RMSEA = 0.015, d_SRMR = 0.015
+```{r}
+diff_scalar_metric_results <- sapply(names(els_config_results), 
+                                     function(fold) {
+  # Extract fit measures for configural and metric models
+  fit_metric <- lavaan::fitMeasures(els_metric_results[[fold]]$model, 
+                                    c("chisq.scaled", 
+                                      "cfi.robust", 
+                                      "rmsea.robust", 
+                                      "srmr"))
+  fit_scalar <- lavaan::fitMeasures(els_scalar_results[[fold]]$model, 
+                                    c("chisq.scaled", 
+                                      "cfi.robust",
+                                      "rmsea.robust",
+                                      "srmr"))
+  # Compute the differences (scalar - metric)
+  fit_diff <- fit_scalar - fit_metric
+  return(fit_diff)
+})
+
+# Convert to a more readable format
+diff_scalar_metric_results <- as.data.frame(t(diff_scalar_metric_results))
+colnames(diff_scalar_metric_results) <- c("Delta_ChiSq", 
+                                          "Delta_CFI", 
+                                          "Delta_RMSEA",
+                                          "Delta_SRMR")
+
+
+
+comparisons <- semTools::compareFit(els_config_results$fold_1$model,
+                                    els_metric_results$fold_1$model,
+                                    els_scalar_results$fold_1$model) 
+                                    #els_strict_results$fold_1$model)
+summary(comparisons)
+
+scalar_models <- list(
+  els_scalar_results$fold_1$model,
+  els_scalar_results$fold_2$model,
+  els_scalar_results$fold_3$model,
+  els_scalar_results$fold_4$model,
+  els_scalar_results$fold_5$model,
+  els_scalar_results$fold_6$model,
+  els_scalar_results$fold_7$model,
+  els_scalar_results$fold_8$model,
+  els_scalar_results$fold_9$model,
+  els_scalar_results$fold_10$model
 )
 
-# Display fit measures summary
-print(fit_measures_summary)
+get_highest_constraint <- function(model) {
+  test_results <- lavTestScore(model)$uni
+  if (is.null(test_results) || nrow(test_results) == 0) return(NULL)
+  highest <- test_results[which.max(test_results$X2), ]
+  return(highest)
+}
+
+highest_constraints_scalar <- lapply(scalar_models, get_highest_constraint)
+# Convert to a data frame for easier viewing
+highest_constraints_scalar_df <- do.call(rbind, highest_constraints_scalar)
+
+
+significant_constraints_scalar <- lapply(scalar_models,
+                                         get_significant_constraint)
+
+# Convert to a data frame for easier viewing
+significant_constraints_scalar_df <- do.call(rbind,
+                                             significant_constraints_scalar)
+```
+
+
+#.
+# Baseline Partial Invariance (Entire dataset)
+#.
+
+
+```{r}
+
+suppressWarnings(
+  fit_full_els_config <- cfa(config_els, data = els,
+                       estimator = "MLR", 
+                       missing = "FIML", 
+                       se = "robust.mlr")
+)
+fit_full_els_config
+
+s_full_els_config <- summary(fit_full_els_config,
+                             standardized = TRUE)
+
+head(modindices(fit_full_els_config, sort. = TRUE, free.remove = FALSE))
+fitMeasures(fit_full_els_config, c("chisq.scaled",
+                                   "srmr", 
+                                   "rmsea.robust", 
+                                   "cfi.robust",
+                                   "df"))
+
+```
+
+## Full Metric ELS
+Cut offs used were: d_CFI = -0.01, d_RMSEA = 0.015, d_SRMR = 0.03
+```{r}
+
+suppressWarnings(
+  fit_full_els_metric <- cfa(metric_els, data = els,
+                       estimator = "MLR", 
+                       missing = "FIML", 
+                       se = "robust.mlr")
+)
+fit_full_els_metric
+
+s_full_els_metric <- summary(fit_full_els_metric,
+                             standardized = TRUE)
+
+lavTestScore(fit_full_els_metric)
+fitMeasures(fit_full_els_metric, c("chisq.scaled",
+                                   "srmr", 
+                                   "rmsea.robust", 
+                                   "cfi.robust",
+                                   "df"))
+
+```
+
+
+## Full Scalar ELS
+Cut offs used were: d_CFI = -0.01, d_RMSEA = 0.015, d_SRMR = 0.015
+```{r}
+suppressWarnings(
+  fit_full_els_scalar <- cfa(scalar_els, data = els,
+                       estimator = "MLR", 
+                       missing = "FIML", 
+                       se = "robust.mlr")
+)
+fit_full_els_scalar
+
+s_full_els_scalar <- summary(fit_full_els_scalar,
+                             standardized = TRUE)
+
+lavTestScore(fit_full_els_scalar)
+modindices(fit_full_els_scalar, op="~1", sort = TRUE, free.remove = FALSE) %>% head(20)
+fitMeasures(fit_full_els_scalar, c("chisq.scaled",
+                                   "srmr", 
+                                   "rmsea.robust", 
+                                   "cfi.robust",
+                                   "df"))
+full_comparisons <- semTools::compareFit(fit_full_els_config, 
+                                         fit_full_els_metric,
+                                         fit_full_els_scalar)
+summary(full_comparisons)
+
+```
+RMSEA: Good! 
+
+## Partial Scalar Full
+```{r}
+partial_scalar_full <- '  
+  math_T1 =~  l1*NA * i1 +
+              l2*1    * i2 +
+              l3    * i3 +
+              l4    * i4 +
+              l5    * i5
+
+
+  # Free both mean and variance
+  math_T1 ~~ var_els_1 * math_T1
+  math_T1 ~ mean_els_1 * 1
+  
+  # Fix second intercept to 0 (putnick bornstein 2016)
+  i1 ~ int1*1
+  i2 ~    0*1
+  i3 ~ int3*1
+  i4 ~ int4*1
+  i5 ~ int5*1
+
+  # Time Point 2
+  math_T2 =~l1*NA * i1_2 +
+            l2*1    * i2_2 +
+            l3    * i3_2 +
+            l4    * i4_2 +
+            l5  * i5_2
+
+
+  # Free both mean and variance
+  math_T2 ~~ var_els_2 * math_T2
+  math_T2 ~ mean_els_2 * 1
+
+  # Fix second intercept to 0 (putnick bornstein 2016)
+  i1_2 ~ int1*1
+  i2_2 ~    0*1
+  i3_2 ~ int3*1
+  i4_2 ~ int4_2*1
+  i5_2 ~ int5*1
+  
+  # Correlations across time
+  math_T1 ~~ math_T2
+  i1 ~~ i1_2
+  i2 ~~ i2_2
+  i3 ~~ i3_2
+  i4 ~~ i4_2
+  i5 ~~ i5_2
+  
+  
+  #i1 = Teen confident can do excellent job on math tests
+  #i2 = Teen certain can understand math textbook
+  i1   ~~ i2
+  i1_2 ~~ i2_2
+  
+  #i2 = Teen certain can understand math textbook
+  #i3 = Can understand difficult math class 
+  i2   ~~ i3
+  i2_2 ~~ i3_2
+  
+  #i4 = Teen confident can do an excellent job on math assignments
+  #i5 = Teen certain can master skills in math course
+  i4   ~~ i5
+  i4_2 ~~ i5_2
+'
+suppressWarnings(
+  fit_full_els_partial_scalar <- cfa(partial_scalar_full, data = els,
+                       estimator = "MLR", 
+                       missing = "FIML", 
+                       se = "robust.mlr")
+)
+
+
+lavTestScore(fit_full_els_partial_scalar)
+modindices(fit_full_els_partial_scalar, 
+           op="~1", 
+           sort = TRUE, 
+           free.remove = FALSE) %>% head(20)
+
+
+```
+
+## Deterine Invariance of Partial Strong
+Cut offs used were: d_CFI = -0.01, d_RMSEA = 0.015, d_SRMR = 0.015
+```{r}
+partial_comparisons <- semTools::compareFit(fit_full_els_partial_scalar,
+                                            fit_full_els_metric)
+summary(partial_comparisons)
+
+```
+
+## How the folds perform
+```{r}
+suppressWarnings(
+  fit_full_els_partial_scalar_fold_10 <- cfa(partial_scalar_full, 
+                                            data = fold_10,
+                                            estimator = "MLR", 
+                                            missing = "FIML", 
+                                            se = "robust.mlr")
+)
+
+bias_comparisons <- semTools::compareFit(fit_full_els_partial_scalar_fold_9,
+                                         fit_full_els_partial_scalar)
+summary(bias_comparisons)
+
+```
+
+
+
+## Baseline Full Comparison
+```{r}
+baseline <- c(
+  scaled.chisq = fitMeasures(fit_full_els_partial_scalar, "scaled.chisquare"),
+  rmsea.robust = fitMeasures(fit_full_els_partial_scalar, "rmsea.robust"),
+  cfi.robust   = fitMeasures(fit_full_els_partial_scalar, "cfi.robust")
+)
+
+folds <- paste0("fit_full_els_partial_scalar_fold_", 1:10)
+diff_df <- data.frame(
+  fold = 1:10,
+  t(sapply(folds, function(fn) 
+    baseline - c(
+      scaled.chisq = fitMeasures(get(fn), "scaled.chisquare"),
+      rmsea.robust = fitMeasures(get(fn), "rmsea.robust"),
+      cfi.robust   = fitMeasures(get(fn), "cfi.robust")
+    )
+  ))
+)
+diff_df
+
+
+```
+
+
+# Baseline Partial Invariance (Fold 1)
+
+```{r}
+suppressWarnings(
+  fit_baseline_els_config <- cfa(config_els, 
+                                            data = fold_1,
+                                            estimator = "MLR", 
+                                            missing = "FIML", 
+                                            se = "robust.mlr")
+)
+suppressWarnings(
+  fit_baseline_els_metric <- cfa(metric_els, 
+                                            data = fold_1,
+                                            estimator = "MLR", 
+                                            missing = "FIML", 
+                                            se = "robust.mlr")
+)
+
+summary(fit_baseline_els_metric, fit.measures = TRUE, standardized = TRUE)
+
+baseline_comparison <- semTools::compareFit(fit_baseline_els_metric, 
+                                            fit_baseline_els_config)
+summary(baseline_comparison)
+```
+
+```{r}
+suppressWarnings(
+  fit_baseline_els_scalar <- cfa(scalar_els, 
+                                            data = fold_1,
+                                            estimator = "MLR", 
+                                            missing = "FIML", 
+                                            se = "robust.mlr")
+)
+summary(fit_baseline_els_scalar, fit.measures = TRUE, standardized = TRUE)
+
+
+baseline_comparison <- semTools::compareFit(fit_baseline_els_scalar, 
+                                            fit_baseline_els_metric)
+summary(baseline_comparison)
+
+
+```
+Cut offs used were: d_CFI = -0.01, d_RMSEA = 0.015, d_SRMR = 0.015
+
+```{r}
+lavTestScore(fit_baseline_els_scalar)
+modindices(fit_baseline_els_scalar, 
+           sort = TRUE, 
+           free.remove = FALSE) %>% head(20)
+```
+
+```{r}
+suppressWarnings(
+  fit_baseline_els_partial_scalar <- cfa(partial_scalar_full, 
+                                            data = fold_1,
+                                            estimator = "MLR", 
+                                            missing = "FIML", 
+                                            se = "robust.mlr")
+)
+summary(fit_baseline_els_partial_scalar,
+        standardized = TRUE)
 ```
 
 ```{r}
 
-k <- 10  # Number of folds
-set.seed(42)
-folds_2 <- createFolds(dat$sample, k = k, list = TRUE)
+baseline_comparison <- semTools::compareFit(fit_baseline_els_partial_scalar, 
+                                            fit_baseline_els_metric)
+summary(baseline_comparison)
 
-cfi_list_2 <- numeric(k)
-rmsea_list_2 <- numeric(k)
-srmr_list_2 <- numeric(k)
-chisq_list_2 <- numeric(k)
 
-for (i in seq_along(folds_2)) {
-  # Split into training and validation
-  validation_indices_2 <- folds_2[[i]]
-  train_data_2 <- dat[-validation_indices_2, ]
-  validation_data_2 <- dat[validation_indices_2
-                           , ]
-  
-  # Fit model on training set
-  fit_train_2 <- sem(both_strong_comb, data = train_data, 
-                                group = "sample", 
-                                estimator = "MLR", 
-                                missing = "FIML", 
-                                se = "robust.mlr")
-  
-  # Fit model on validation set using training constraints
-  fit_validation_2 <- sem(both_strong_comb, 
-                                          data = validation_data_2, 
-                                          group = "sample", 
-                                          estimator = "MLR", 
-                                          missing = "FIML", se = "robust.mlr")
-  
-  # Extract fit measures for the validation set
-  cfi_list_2[i] <- fitMeasures(fit_validation_2, "cfi")
-  rmsea_list_2[i] <- fitMeasures(fit_validation_2, "rmsea")
-  srmr_list_2[i] <- fitMeasures(fit_validation_2, "srmr")
-  chisq_list_2[i] <- fitMeasures(fit_validation_2, 'chisq.scaled')
-}
-
-fit_measures_summary_2 <- data.frame(
-  Fold = seq_len(k),
-  CFI = cfi_list_2,
-  RMSEA = rmsea_list_2,
-  SRMR = srmr_list_2,
-  chisquare =  chisq_list_2
-)
-
-# Calculate mean and standard deviation of fit measures across folds
-fit_measures_summary_2 <- rbind(
-  fit_measures_summary_2,
-  data.frame(
-    Fold = "Mean",
-    CFI = mean(cfi_list_2),
-    RMSEA = mean(rmsea_list_2),
-    SRMR = mean(srmr_list_2),
-    chisquare = mean(chisq_list_2)
-  ),
-  data.frame(
-    Fold = "SD",
-    CFI = sd(cfi_list_2),
-    RMSEA = sd(rmsea_list_2),
-    SRMR = sd(srmr_list_2),
-    chisquare = sd(chisq_list_2)
-  )
-)
-
-# Display fit measures summary
-print(fit_measures_summary_2)
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
